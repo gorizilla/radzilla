@@ -99,12 +99,15 @@ the press acknowledges first).
 
 | Setting | Default | Meaning |
 |---|---|---|
+| `RING_WARN_PCT` | `50` | outer ring changes from green (normal) to dimmed orange (pre-warning) |
 | `BACKGROUND_USV` | `0.15` | dose rate below this does not count as extra dose (set slightly above your local background) |
 | `DAILY_BUDGET_USV` | `2.7` | 100 % of the inner ring; ≈ 1 mSv per year (public limit for artificial exposure) ÷ 365 |
 
 - **Outer ring** (24 segments, ~4 % each): dose of the last `DOSE_WINDOW_MIN`
-  minutes in % of `DOSE_LIMIT_USV`. Dimmed orange below 100 %, bright orange
-  from 100 % (= DOSE alarm). It empties again when you move away.
+  minutes in % of `DOSE_LIMIT_USV`. **Green** below `RING_WARN_PCT` (normal),
+  **dimmed orange** from there (pre-warning), **bright orange** from 100 %
+  (= DOSE alarm, blinks while the siren sounds). Symbol and percentage use the
+  same colour. It empties again when you move away.
 - **Inner ring** (blue): extra dose since switching on – only the part above
   `BACKGROUND_USV` – in % of `DAILY_BUDGET_USV`. Information only, no alarm;
   it restarts at 0 after switching off and on.

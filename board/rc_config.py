@@ -61,10 +61,12 @@ DOSE_LIMIT_USV = 2.5
 
 # --- DOSE page (3rd page, short PWR press cycles µSv/h -> CPS -> DOSE) ------------
 # Outer ring: dose of the last DOSE_WINDOW_MIN minutes in % of DOSE_LIMIT_USV
-#   (dimmed orange below 100 %, bright orange from 100 % = DOSE alarm).
+#   green below RING_WARN_PCT (normal), dimmed orange from RING_WARN_PCT
+#   (pre-warning), bright orange from 100 % (= DOSE alarm).
 # Inner ring (blue): extra dose today = dose above BACKGROUND_USV since
 #   switching on, in % of DAILY_BUDGET_USV. Information only, no alarm.
 #   2.7 µSv/day ≈ 1 mSv per year (public limit for artificial exposure) / 365.
+RING_WARN_PCT = 50         # outer ring turns from green to dimmed orange
 BACKGROUND_USV = 0.15      # dose rate below this does not count as extra dose
 DAILY_BUDGET_USV = 2.7
 

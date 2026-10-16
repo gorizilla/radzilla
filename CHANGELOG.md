@@ -5,7 +5,8 @@
 - **New 3rd page "DOSE"** – a short PWR press now cycles
   µSv/h → CPS → DOSE. Radiation symbol with two rings:
   - outer ring (24 segments): dose of the last 15 min in % of the dose
-    limit – dimmed orange below 100 %, bright orange from 100 % (DOSE alarm)
+    limit – green below 50 % (`RING_WARN_PCT`), dimmed orange up to 100 %,
+    bright orange from 100 % (DOSE alarm)
   - inner ring (blue): **extra dose today** above `BACKGROUND_USV`
     (0.15 µSv/h) since switching on, in % of `DAILY_BUDGET_USV` (2.7 µSv ≈
     1 mSv/year ÷ 365) – information only

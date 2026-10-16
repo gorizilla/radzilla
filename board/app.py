@@ -13,6 +13,8 @@
 #   2  DOSE page: radiation symbol with two rings
 #        outer ring (segments): dose within the last DOSE_WINDOW_MIN minutes
 #                               vs. DOSE_LIMIT_USV – drives the DOSE alarm
+#                               green < RING_WARN_PCT, dimmed orange < 100 %,
+#                               bright orange from 100 %
 #        inner ring (thin, blue): extra dose today above BACKGROUND_USV
 #                                 vs. DAILY_BUDGET_USV – information only
 #
@@ -595,12 +597,15 @@ def _draw_dose_page(lcd, fresh):
     pct = _dose_pct()
     epct = _extra_pct()
 
-    # colour: dimmed orange below 100 %, bright orange from 100 % (DOSE alarm);
-    # while the DOSE alarm blinks, the bright phases alternate with dimmed ones
-    if pct >= 100 and (not _is_blinking(3) or S.blink_on):
-        col = ORANGE
-    else:
+    # colour: green below RING_WARN_PCT (normal), dimmed orange up to 100 %
+    # (pre-warning), bright orange from 100 % (DOSE alarm); while the DOSE
+    # alarm blinks, the bright phases alternate with dimmed ones
+    if pct >= 100:
+        col = ORANGE if (not _is_blinking(3) or S.blink_on) else DIM_ORANGE
+    elif pct >= C.RING_WARN_PCT:
         col = DIM_ORANGE
+    else:
+        col = GREEN
 
     outer, inner = _ring_geometry()
     filled = min(RING_SEGMENTS, int(pct / 100 * RING_SEGMENTS + 0.5))

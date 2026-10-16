@@ -84,7 +84,7 @@ status lines.
 
 | Ring | Shows | Fills | Empties |
 |---|---|---|---|
-| outer, segments, orange | dose of the last 15 min vs. the dose limit | near a source | by itself when you move away (sliding window) |
+| outer, segments, green → orange | dose of the last 15 min vs. the dose limit | near a source | by itself when you move away (sliding window) |
 | inner, thin, blue | extra dose above background since switching on vs. daily budget | slowly over the day | only when switched off and on again |
 
 Log files: `/logs/rc_YYYY-MM-DD_HHMM.csv` with `Time;uSv/h;CPS;Alarm;Dose15`
