@@ -1,0 +1,16 @@
+# --- Secrets: never commit real credentials ---
+board/secrets.py
+secrets.py
+
+# --- Measurement logs downloaded from the board ---
+logs/
+board/logs/
+*.csv
+
+# --- Python / editor / OS clutter ---
+__pycache__/
+*.pyc
+*.mpy
+.DS_Store
+.vscode/
+.idea/
