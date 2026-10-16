@@ -7,6 +7,10 @@ logs/
 board/logs/
 *.csv
 
+# --- 3D printing: only STL is kept, no printer-specific G-code ---
+*.gcode
+*.bgcode
+
 # --- Python / editor / OS clutter ---
 __pycache__/
 *.pyc

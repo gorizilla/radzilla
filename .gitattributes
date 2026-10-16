@@ -1,0 +1,17 @@
+# Binary files: no line-ending conversion, no text diffs
+*.stl  binary
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+
+# Line endings for text files
+*.py   text eol=lf
+*.md   text eol=lf
+
+# --- Optional: Git LFS for large files -------------------------------------
+# Only needed if STL or photo files become large (tens of MB).
+# Install Git LFS, then remove the "#" in front of these lines and run
+#   git lfs install
+# *.stl  filter=lfs diff=lfs merge=lfs -text
+# *.jpg  filter=lfs diff=lfs merge=lfs -text
+# *.jpeg filter=lfs diff=lfs merge=lfs -text

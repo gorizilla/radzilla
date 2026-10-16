@@ -3,8 +3,9 @@
 **RadZilla – external display for RadiaCode**
 Copyright © 2026 Shimizilla
 
-This work (source code, documentation and images in this repository, unless
-stated otherwise) is licensed under the
+This work – source code, documentation, images, photos (`media/`) and
+3D models (`hardware/`) in this repository, unless stated otherwise – is
+licensed under the
 **Creative Commons Attribution-NonCommercial 4.0 International License
 (CC BY-NC 4.0)**.
 

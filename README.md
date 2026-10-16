@@ -110,6 +110,11 @@ radzilla/
 │   ├── power.py          power latch, PWR button, buzzer
 │   └── pins.py           pin assignment (V2)
 ├── docs/             HARDWARE, SETUP, CONFIGURATION
+│   └── images/           screenshots and graphics for the docs
+├── hardware/
+│   └── 3d/               3D-printed parts: README (print settings) + stl/
+├── media/
+│   └── photos/           build and usage photos (JPEG)
 ├── tools/            computer-side helpers (planned: log evaluation)
 ├── LICENSE.md        CC BY-NC 4.0
 ├── NOTICE.md         disclaimer, trademarks, acknowledgements

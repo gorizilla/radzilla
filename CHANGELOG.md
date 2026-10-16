@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Repository: folders for 3D-printed parts (`hardware/3d/stl/`, STL only,
+  print-settings template) and photos (`media/photos/`, JPEG).
+- `.gitignore` excludes G-code; `.gitattributes` marks binaries and contains
+  an optional Git LFS template.
+
 ## v1.1.0 – 2026-10-16
 
 - **New: dose alarm DOSE** (orange) – triggers when more than
