@@ -1,4 +1,4 @@
-# app.py – RadiaCode display with alarms, dose alarm, trend arrow and CSV log.
+# app.py – RadiaCode display: 3 pages, alarms, dose alarm, trend and CSV log.
 #
 # RadZilla – external display for RadiaCode
 # Copyright (c) 2026 Shimizilla – licensed under CC BY-NC 4.0 (see LICENSE.md)
@@ -7,22 +7,35 @@
 #
 # Settings: rc_config.py
 #
+# Pages (short PWR press cycles through them):
+#   0  dose rate µSv/h large, CPS small, trend arrow
+#   1  count rate CPS large, µSv/h small, trend arrow
+#   2  DOSE page: radiation symbol with two rings
+#        outer ring (segments): dose within the last DOSE_WINDOW_MIN minutes
+#                               vs. DOSE_LIMIT_USV – drives the DOSE alarm
+#        inner ring (thin, blue): extra dose today above BACKGROUND_USV
+#                                 vs. DAILY_BUDGET_USV – information only
+#
 # Alarms (codes as used in the CSV log):
-#   1 HIGH    dose rate >= LEVEL1_USV                 yellow
-#   2 DANGER  dose rate >= LEVEL2_USV                 red
+#   1 HIGH    dose rate >= LEVEL1_USV                         yellow
+#   2 DANGER  dose rate >= LEVEL2_USV                         red
 #   3 DOSE    dose within DOSE_WINDOW_MIN >= DOSE_LIMIT_USV   orange
-# Several at once: the frame shows the most important, DANGER > DOSE > HIGH.
+# Several at once: the most important is shown, DANGER > DOSE > HIGH.
 # All alarms end only below threshold x (1 - HYSTERESIS).
+# HIGH / DANGER blink until acknowledged. DOSE blinks only while its sound
+# plays (siren, once by default) and then stays lit until it ends.
 #
 # PWR short:  alarm active -> acknowledge all alarms (silent until they end)
-#             otherwise    -> swap the large value µSv/h <-> CPS
+#             otherwise    -> next page
 # PWR double: time sync (handled by main.py)
 #
 # Interface used by main.py:
-#   setup(ctx), loop(ctx), draw(ctx), on_short(ctx), on_shutdown(ctx)
+#   setup(ctx), loop(ctx), draw(ctx), on_short(ctx), on_shutdown(ctx),
+#   show_battery()
 #   The application area of the screen starts at y = 60.
 
 import asyncio
+import math
 import time
 from array import array
 from machine import Pin, PWM
@@ -34,6 +47,17 @@ from st7789 import WHITE, GREY, GREEN, YELLOW, RED, color565
 
 APP_Y = 60
 ORANGE = color565(255, 140, 0)
+DIM_ORANGE = color565(150, 80, 0)       # dose ring below 100 %
+DARK = color565(45, 45, 45)             # empty ring segments
+BLUE = color565(0, 140, 255)            # extra-dose ring
+DARK_BLUE = color565(20, 35, 70)        # empty part of the extra-dose ring
+
+PAGE_USV, PAGE_CPS, PAGE_DOSE = 0, 1, 2
+N_PAGES = 3
+
+# Layout of the bottom status lines (all pages)
+Y_STATUS = 256
+Y_LOGSTATUS = 268
 
 # Status texts (bottom line)
 ST_START = "Start"
@@ -54,8 +78,8 @@ class State:
         self.usv = None
         self.batt = None          # RadiaCode battery in %
         self.last_ms = None       # time of the last reading
-        self.view = 0             # 0 = µSv/h large, 1 = CPS large
-        self.level = 0            # alarm level 0 / 1 / 2
+        self.view = PAGE_USV      # current page
+        self.level = 0            # dose-rate alarm level 0 / 1 / 2
         self.acked = False
         self.count = 0            # beeps triggered in the current level
         self.last_beep = None
@@ -70,6 +94,9 @@ class State:
         self.dose_acked = False
         self.dose_count = 0
         self.dose_last_beep = None
+        self.dose_blink_until = None   # DOSE blinks only until this time
+        # extra dose today (above background, since switching on)
+        self.extra_total = 0.0
 
 
 S = State()
@@ -125,10 +152,11 @@ def _trend(idx, min_abs):
     return 0
 
 
-# ---------- dose within the window --------------------------------------------------
+# ---------- dose -------------------------------------------------------------------
 def _add_dose(usv, now):
-    """Add the dose of one reading. The time step is limited to 2 poll
-    intervals, so gaps without data (disconnect) count as 0."""
+    """Add the dose of one reading to the 15-min window and to the extra
+    dose of the day. The time step is limited to 2 poll intervals, so gaps
+    without data (disconnect) count as 0."""
     if S.last_rd_ms is None:
         dt = C.RC_POLL_MS
     else:
@@ -137,6 +165,7 @@ def _add_dose(usv, now):
     inc = usv * dt / 3_600_000           # µSv/h x ms -> µSv
     S.dose_hist.append((now, inc))
     S.dose_total += inc
+    S.extra_total += max(0.0, usv - C.BACKGROUND_USV) * dt / 3_600_000
     _trim_dose(now)
 
 
@@ -147,6 +176,14 @@ def _trim_dose(now):
         S.dose_total -= S.dose_hist.pop(0)[1]
     if not S.dose_hist or S.dose_total < 0:   # empty window / rounding errors
         S.dose_total = 0.0
+
+
+def _alarm3_sound_ms():
+    """Duration of the DOSE alarm sound = time the DOSE alarm blinks."""
+    if C.ALARM3_SOUND == "siren":
+        return C.SIREN_RISE_MS + C.SIREN_HOLD_MS + C.SIREN_FALL_MS
+    n = C.ALARM3_BEEPS
+    return n * C.ALARM3_BEEP_MS + (n - 1) * C.ALARM3_PAUSE_MS
 
 
 def _update_dose(ctx):
@@ -163,11 +200,37 @@ def _update_dose(ctx):
     S.dose_acked = False                 # new alarm or alarm over
     S.dose_count = 0
     S.dose_last_beep = None
+    # blink once for the length of the sound (at least 1 s, also if muted)
+    S.dose_blink_until = time.ticks_add(time.ticks_ms(),
+                                        max(1000, _alarm3_sound_ms())) if new else None
     ctx.dirty = True
 
 
+def _dose_pct():
+    return S.dose_total / C.DOSE_LIMIT_USV * 100 if C.DOSE_LIMIT_USV else 0
+
+
+def _extra_pct():
+    return S.extra_total / C.DAILY_BUDGET_USV * 100 if C.DAILY_BUDGET_USV else 0
+
+
+def _dose_eta():
+    """Time until the dose limit is reached at the current dose rate."""
+    lim = C.DOSE_LIMIT_USV
+    if S.dose_total >= lim:
+        return "LIMIT REACHED"
+    if not _fresh() or not S.usv:
+        return "--"
+    # at a constant rate the window sum approaches rate x window
+    if S.usv * C.DOSE_WINDOW_MIN / 60 < lim:
+        return "SAFE"
+    secs = int((lim - S.dose_total) / S.usv * 3600)
+    return "DOSE LIMIT IN %d:%02d" % (secs // 60, secs % 60)
+
+
+# ---------- alarm state -------------------------------------------------------------
 def _shown_alarm():
-    """Alarm shown in the frame and written to the log (priority)."""
+    """Alarm shown on screen and written to the log (priority)."""
     if S.level == 2:
         return 2
     if S.dose_active:
@@ -179,10 +242,23 @@ def _is_acked(alarm):
     return S.dose_acked if alarm == 3 else S.acked
 
 
+def _is_blinking(alarm):
+    """HIGH/DANGER blink until acknowledged; DOSE only while its sound plays."""
+    if alarm == 0 or _is_acked(alarm):
+        return False
+    if alarm == 3:
+        return S.dose_blink_until is not None and \
+            time.ticks_diff(S.dose_blink_until, time.ticks_ms()) > 0
+    return True
+
+
+def _visible(alarm):
+    return not _is_blinking(alarm) or S.blink_on
+
+
 # ---------- graphics ---------------------------------------------------------------
 def _trefoil(fb, cx, cy, r, color):
     """Radiation warning symbol: three 60° blades and a centre dot."""
-    import math
     ri = r * 0.32
     for a0 in (90, 210, 330):                  # blades: bottom, top-left, top-right
         pts = []
@@ -197,6 +273,37 @@ def _trefoil(fb, cx, cy, r, color):
         fb.poly(cx, cy, array("h", pts), color, True)
     d = max(2, int(r * 0.2))
     fb.ellipse(cx, cy, d, d, color, True)
+
+
+def _arc_poly(r_in, r_out, a0, a1, steps):
+    """Polygon of a ring segment (angles in degrees, 0° = right, clockwise)."""
+    pts = []
+    for i in range(steps + 1):
+        t = math.radians(a0 + (a1 - a0) * i / steps)
+        pts.append(int(round(r_out * math.cos(t))))
+        pts.append(int(round(r_out * math.sin(t))))
+    for i in range(steps, -1, -1):
+        t = math.radians(a0 + (a1 - a0) * i / steps)
+        pts.append(int(round(r_in * math.cos(t))))
+        pts.append(int(round(r_in * math.sin(t))))
+    return array("h", pts)
+
+
+# Ring geometry is computed once and reused for every frame.
+RING_SEGMENTS = 24          # outer ring: 24 segments of 15° (~4 % each)
+RING_STEPS = 72             # inner ring: 72 steps of 5°
+_RING = None
+
+
+def _ring_geometry():
+    global _RING
+    if _RING is None:
+        outer = [_arc_poly(44, 52, -90 + i * 15 + 1.5, -90 + i * 15 + 13.5, 3)
+                 for i in range(RING_SEGMENTS)]
+        inner = [_arc_poly(37, 40, -90 + i * 5, -90 + i * 5 + 5, 1)
+                 for i in range(RING_STEPS)]
+        _RING = (outer, inner)
+    return _RING
 
 
 def _alarm_box(lcd, alarm, acked, show):
@@ -218,7 +325,7 @@ def _alarm_box(lcd, alarm, acked, show):
         fb.fill_rect(min(ax, ax + L * sx), ay - (1 if sy < 0 else 0), L, 2, col)
         fb.fill_rect(ax - (1 if sx < 0 else 0), min(ay, ay + L * sy), 2, L, col)
     _trefoil(fb, 42, 215, 13, col)
-    txt = (C.ALARM1_TEXT, C.ALARM2_TEXT, C.ALARM3_TEXT)[alarm - 1][:9]
+    txt = _alarm_text(alarm)
     tx = 64 + (158 - len(txt) * 16) // 2
     # second line: dose for the dose alarm, ACK after acknowledging
     sub = ""
@@ -232,6 +339,14 @@ def _alarm_box(lcd, alarm, acked, show):
         lcd.text(sub, 64 + (158 - len(sub) * 8) // 2, 224, GREY, 1)
     else:
         lcd.text(txt, tx, 207, col, 2)
+
+
+def _alarm_text(alarm):
+    return (C.ALARM1_TEXT, C.ALARM2_TEXT, C.ALARM3_TEXT)[alarm - 1][:9]
+
+
+def _alarm_color(alarm):
+    return (YELLOW, RED, ORANGE)[alarm - 1]
 
 
 def _arrow(fb, x, y, d, color):
@@ -276,6 +391,11 @@ def _update_level(ctx):
     ctx.dirty = True
 
 
+def _buzzer_off(p):
+    p.deinit()
+    Pin(pins.BUZZER, Pin.OUT, value=0)    # leave the pin LOW (no current)
+
+
 async def _beep(freq, n, on_ms, pause_ms):
     """Non-blocking beep pattern (runs as its own task)."""
     p = PWM(Pin(pins.BUZZER), freq=freq, duty_u16=32768)
@@ -287,8 +407,37 @@ async def _beep(freq, n, on_ms, pause_ms):
             if i < n - 1:
                 await asyncio.sleep_ms(pause_ms)
     finally:
-        p.deinit()
-        Pin(pins.BUZZER, Pin.OUT, value=0)
+        _buzzer_off(p)
+
+
+async def _siren():
+    """Rising and falling siren (DOSE alarm). Stops early when acknowledged.
+    The small on-board buzzer is quiet below ~1 kHz, hence the high range."""
+    lo, hi, step = C.SIREN_LOW_HZ, C.SIREN_HIGH_HZ, C.SIREN_STEP_MS
+    p = PWM(Pin(pins.BUZZER), freq=lo, duty_u16=32768)
+    try:
+        n = max(1, C.SIREN_RISE_MS // step)
+        for i in range(n + 1):                       # rise
+            if S.dose_acked:
+                return
+            p.freq(int(lo + (hi - lo) * i / n))
+            p.duty_u16(32768)
+            await asyncio.sleep_ms(step)
+        t = 0
+        while t < C.SIREN_HOLD_MS:                   # hold
+            if S.dose_acked:
+                return
+            await asyncio.sleep_ms(step)
+            t += step
+        n = max(1, C.SIREN_FALL_MS // step)
+        for i in range(n + 1):                       # fall
+            if S.dose_acked:
+                return
+            p.freq(int(hi - (hi - lo) * i / n))
+            p.duty_u16(32768)
+            await asyncio.sleep_ms(step)
+    finally:
+        _buzzer_off(p)
 
 
 def _alarm_cfg(alarm):
@@ -303,9 +452,9 @@ def _alarm_cfg(alarm):
 
 
 async def alarm_task(ctx):
-    """Dose window upkeep, blinking and beeping of the shown alarm.
-    Only the alarm shown in the frame beeps; each alarm has its own
-    repeat counter."""
+    """Dose window upkeep, blinking and sound of the shown alarm.
+    Only the shown alarm makes a sound; each alarm has its own counter."""
+    was_blinking = False
     while True:
         await asyncio.sleep_ms(50)
         now = time.ticks_ms()
@@ -313,11 +462,17 @@ async def alarm_task(ctx):
         _update_dose(ctx)
 
         a = _shown_alarm()
-        if a and not _is_acked(a):
+        blinking = _is_blinking(a)
+        if blinking:
             on = (now // C.ALARM_BLINK_MS) % 2 == 0
             if on != S.blink_on:
                 S.blink_on = on
                 ctx.dirty = True
+        elif was_blinking:                   # blinking just ended -> show steady
+            S.blink_on = True
+            ctx.dirty = True
+        was_blinking = blinking
+
         if a == 0 or _is_acked(a) or not _fresh():
             continue
         on, freq, n, on_ms, pause, interval, maxrep = _alarm_cfg(a)
@@ -329,10 +484,15 @@ async def alarm_task(ctx):
             if a == 3:
                 S.dose_last_beep = now
                 S.dose_count += 1
+                S.dose_blink_until = time.ticks_add(now, max(1000, _alarm3_sound_ms()))
+                if C.ALARM3_SOUND == "siren":
+                    asyncio.create_task(_siren())
+                else:
+                    asyncio.create_task(_beep(freq, n, on_ms, pause))
             else:
                 S.last_beep = now
                 S.count += 1
-            asyncio.create_task(_beep(freq, n, on_ms, pause))
+                asyncio.create_task(_beep(freq, n, on_ms, pause))
 
 
 # ---------- log -------------------------------------------------------------------------
@@ -365,6 +525,11 @@ def on_shutdown(ctx):
     LOG.flush()
 
 
+def show_battery():
+    """main.py asks whether to show the board battery line (not on DOSE page)."""
+    return S.view != PAGE_DOSE
+
+
 def on_short(ctx):
     rate_open = S.level > 0 and not S.acked
     dose_open = S.dose_active and not S.dose_acked
@@ -374,21 +539,28 @@ def on_short(ctx):
         if S.dose_active:
             S.dose_acked = True
     else:
-        S.view ^= 1
+        S.view = (S.view + 1) % N_PAGES
     ctx.dirty = True
 
 
-def draw(ctx):
-    lcd = ctx.lcd
-    fresh = _fresh()
-    col = _color(S.level) if fresh else GREY
+def _draw_status(lcd):
+    st = S.status
+    if S.batt is not None and S.connected:
+        st += "  RC %d%%" % S.batt
+    lcd.text_center(st, Y_STATUS, GREY, 1)
+    ls = LOG.status(S.time_valid)
+    if ls:
+        lcd.text_center(ls, Y_LOGSTATUS, RED if LOG.full or LOG.error else GREY, 1)
 
+
+def _draw_rate_page(lcd, fresh):
+    col = _color(S.level) if fresh else GREY
     if fresh:
         usv_s, cps_s = _fmt_usv(S.usv), _fmt_cps(S.cps)
     else:
         usv_s = cps_s = "--"
 
-    if S.view == 0:
+    if S.view == PAGE_USV:
         big, big_unit, big_col = usv_s, "uSv/h", col
         small = "CPS " + cps_s
         small_col = WHITE if fresh else GREY
@@ -411,20 +583,60 @@ def draw(ctx):
     lcd.text_center(big_unit, 132, GREY, 2)
     lcd.text_center(small, 168, small_col, 2)
 
-    # alarm frame (blinks while not acknowledged)
+    # alarm frame
     a = _shown_alarm()
     if a and fresh:
-        ack = _is_acked(a)
-        _alarm_box(lcd, a, ack, ack or S.blink_on)
+        _alarm_box(lcd, a, _is_acked(a), _visible(a))
 
-    # status lines at the bottom
-    st = S.status
-    if S.batt is not None and S.connected:
-        st += "  RC %d%%" % S.batt
-    lcd.text_center(st, 250, GREY, 1)
-    ls = LOG.status(S.time_valid)
-    if ls:
-        lcd.text_center(ls, 262, RED if LOG.full or LOG.error else GREY, 1)
+
+def _draw_dose_page(lcd, fresh):
+    fb = lcd.fb
+    cx, cy = 120, 126
+    pct = _dose_pct()
+    epct = _extra_pct()
+
+    # colour: dimmed orange below 100 %, bright orange from 100 % (DOSE alarm);
+    # while the DOSE alarm blinks, the bright phases alternate with dimmed ones
+    if pct >= 100 and (not _is_blinking(3) or S.blink_on):
+        col = ORANGE
+    else:
+        col = DIM_ORANGE
+
+    outer, inner = _ring_geometry()
+    filled = min(RING_SEGMENTS, int(pct / 100 * RING_SEGMENTS + 0.5))
+    for i, seg in enumerate(outer):
+        fb.poly(cx, cy, seg, col if i < filled else DARK, True)
+    efilled = min(RING_STEPS, int(epct / 100 * RING_STEPS + 0.5))
+    for i, seg in enumerate(inner):
+        fb.poly(cx, cy, seg, BLUE if i < efilled else DARK_BLUE, True)
+    _trefoil(fb, cx, cy, 25, col)
+
+    # alarm badge at the top (the large frame does not fit on this page)
+    a = _shown_alarm()
+    if a and _visible(a):
+        badge = _alarm_text(a) + ((" " + C.ACK_TEXT) if _is_acked(a) else "")
+        lcd.text_center(badge, 62, _alarm_color(a), 1)
+
+    lcd.text_center("%d %%" % int(pct + 0.5), 184, col, 3)
+    lcd.text_center("%.2f / %.2f uSv  %dmin" % (S.dose_total, C.DOSE_LIMIT_USV,
+                                                C.DOSE_WINDOW_MIN), 212, WHITE, 1)
+    eta = _dose_eta()
+    lcd.text_center(eta, 224, GREEN if eta == "SAFE" else (GREY if eta == "--" else col), 1)
+    lcd.text_center("Extra today %.2f uSv (%d%%)" % (S.extra_total, int(epct + 0.5)),
+                    236, BLUE, 1)
+    lcd.text_center("H %.2f  D %.1f  DOSE %.1f/%d" % (C.LEVEL1_USV, C.LEVEL2_USV,
+                                                      C.DOSE_LIMIT_USV, C.DOSE_WINDOW_MIN),
+                    246, GREY, 1)
+
+
+def draw(ctx):
+    lcd = ctx.lcd
+    fresh = _fresh()
+    if S.view == PAGE_DOSE:
+        _draw_dose_page(lcd, fresh)
+    else:
+        _draw_rate_page(lcd, fresh)
+    _draw_status(lcd)
 
 
 def _set_status(ctx, text, connected=False):

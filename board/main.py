@@ -7,7 +7,7 @@
 # battery), the PWR button, time sync and the display loop, and starts the
 # application in app.py (RadiaCode display).
 #
-# PWR button:  short  -> app.on_short()
+# PWR button:  short  -> app.on_short() (acknowledge alarms / next page)
 #              double -> time sync with the PTB atomic clock
 #              long   -> beep and switch off (battery operation only)
 #
@@ -140,8 +140,9 @@ def draw(ctx):
     lcd.fb.fill(BLACK)
     # status bar
     lcd.text_center(ctx.time_str, 18, WHITE, 2)
-    bat = "Batt: --" if ctx.vbat is None else "Batt: %.2f V" % ctx.vbat
-    lcd.text_center(bat, 40, GREY, 1)
+    if getattr(app, "show_battery", lambda: True)():   # hidden on the DOSE page
+        bat = "Batt: --" if ctx.vbat is None else "Batt: %.2f V" % ctx.vbat
+        lcd.text_center(bat, 40, GREY, 1)
     lcd.fb.hline(20, 54, 200, GREY)
     # application area (y >= 60) or a notice
     if ctx.notice and time.ticks_diff(ctx.notice_until, time.ticks_ms()) > 0:

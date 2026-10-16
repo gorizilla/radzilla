@@ -1,11 +1,27 @@
 # Changelog
 
-## Unreleased
+## v1.2.0 – 2026-10-16
 
+- **New 3rd page "DOSE"** – a short PWR press now cycles
+  µSv/h → CPS → DOSE. Radiation symbol with two rings:
+  - outer ring (24 segments): dose of the last 15 min in % of the dose
+    limit – dimmed orange below 100 %, bright orange from 100 % (DOSE alarm)
+  - inner ring (blue): **extra dose today** above `BACKGROUND_USV`
+    (0.15 µSv/h) since switching on, in % of `DAILY_BUDGET_USV` (2.7 µSv ≈
+    1 mSv/year ÷ 365) – information only
+  - texts: dose vs. limit, `DOSE LIMIT IN m:ss` / `SAFE` / `LIMIT REACHED`,
+    extra dose, configured thresholds; small alarm badge at the top;
+    no board battery line on this page
+- **DOSE alarm sound: siren** (rising 1500 → 3500 Hz, hold, falling, ~3 s),
+  played **once** (`ALARM3_MAX_REPEAT = 1`), stops when acknowledged.
+  The DOSE alarm blinks only while the sound plays, then stays lit.
+  `ALARM3_SOUND = "beep"` restores the beep pattern.
+- Bottom status lines moved down by 6 px (all pages).
 - Repository: folders for 3D-printed parts (`hardware/3d/stl/`, STL only,
   print-settings template) and photos (`media/photos/`, JPEG).
 - `.gitignore` excludes G-code; `.gitattributes` marks binaries and contains
   an optional Git LFS template.
+- Docs: new screenshot of the DOSE page (`docs/images/dose_page.png`).
 
 ## v1.1.0 – 2026-10-16
 

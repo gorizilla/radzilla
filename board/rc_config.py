@@ -59,8 +59,19 @@ DOSE_ON = True             # False = dose alarm completely off
 DOSE_WINDOW_MIN = 15
 DOSE_LIMIT_USV = 2.5
 
+# --- DOSE page (3rd page, short PWR press cycles µSv/h -> CPS -> DOSE) ------------
+# Outer ring: dose of the last DOSE_WINDOW_MIN minutes in % of DOSE_LIMIT_USV
+#   (dimmed orange below 100 %, bright orange from 100 % = DOSE alarm).
+# Inner ring (blue): extra dose today = dose above BACKGROUND_USV since
+#   switching on, in % of DAILY_BUDGET_USV. Information only, no alarm.
+#   2.7 µSv/day ≈ 1 mSv per year (public limit for artificial exposure) / 365.
+BACKGROUND_USV = 0.15      # dose rate below this does not count as extra dose
+DAILY_BUDGET_USV = 2.7
+
 # --- Alarm display ---------------------------------------------------------------
-ALARM_BLINK_MS = 500       # on/off period while not acknowledged
+ALARM_BLINK_MS = 500       # on/off period while blinking
+                           # HIGH/DANGER blink until acknowledged,
+                           # DOSE only while its sound plays
 ALARM1_TEXT = "HIGH"       # max. 9 characters
 ALARM2_TEXT = "DANGER"     # max. 9 characters
 ALARM3_TEXT = "DOSE"       # max. 9 characters
@@ -87,10 +98,21 @@ ALARM2_INTERVAL_MS = 2000
 ALARM2_MAX_REPEAT = 0      # 0 = unlimited
 
 # --- Alarm 3 (orange, dose alarm) --------------------------------------------------
-ALARM3_ON = True           # beeps only; DOSE_ON switches the whole alarm
+ALARM3_ON = True           # sound only; DOSE_ON switches the whole alarm
+ALARM3_SOUND = "siren"     # "siren" (rising/falling) or "beep" (pattern below)
+ALARM3_MAX_REPEAT = 1      # sound once per alarm event (0 = unlimited)
+ALARM3_INTERVAL_MS = 5000  # repeat interval if MAX_REPEAT allows repeats
+
+# siren (ALARM3_SOUND = "siren"): ~3 s, the on-board buzzer is quiet < 1 kHz
+SIREN_LOW_HZ = 1500
+SIREN_HIGH_HZ = 3500
+SIREN_RISE_MS = 1200
+SIREN_HOLD_MS = 600
+SIREN_FALL_MS = 1200
+SIREN_STEP_MS = 10         # frequency step interval (smoothness)
+
+# beep pattern (ALARM3_SOUND = "beep")
 ALARM3_FREQ_HZ = 2500
 ALARM3_BEEPS = 2
 ALARM3_BEEP_MS = 150
 ALARM3_PAUSE_MS = 100
-ALARM3_INTERVAL_MS = 5000
-ALARM3_MAX_REPEAT = 5      # 0 = unlimited

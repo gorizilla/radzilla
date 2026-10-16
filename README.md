@@ -15,14 +15,18 @@ manufacturer of RadiaCode devices.
 
 ![RadZilla screens (simulated preview)](docs/images/screens.png)
 
-*Simulated preview – on the device the built-in 8×8 pixel font is used.*
+![RadZilla DOSE page (simulated preview)](docs/images/dose_page.png)
+
+*Simulated previews – on the device the built-in 8×8 pixel font is used.*
 
 ---
 
 ## Features
 
-- **Live display** of dose rate (µSv/h) and count rate (CPS), large value
-  switchable with the PWR button
+- **Three pages**, switched with the PWR button: dose rate (µSv/h), count
+  rate (CPS) and the **DOSE page** – radiation symbol with an outer ring for
+  the dose of the last 15 min and an inner ring for today's extra dose above
+  background, time until the dose limit, configured thresholds
 - **Colour levels** green / yellow / red with configurable thresholds
 - **Trend arrow** ↑ → ↓ (last 10 s vs. the 10 s before)
 - **Three alarms** with hysteresis, blinking HUD frame with radiation symbol,
@@ -30,7 +34,8 @@ manufacturer of RadiaCode devices.
   - *HIGH* (yellow) from 0.28 µSv/h – something radioactive is nearby
   - *DANGER* (red) from 10 µSv/h – immediate alarm
   - *DOSE* (orange) – more than 2.5 µSv collected within 15 min, i.e. a
-    longer stay near a source; triggers the faster the higher the dose rate
+    longer stay near a source; triggers the faster the higher the dose rate;
+    plays a siren once and blinks while it sounds
 - **CSV log** every 3 s in `/logs`, automatic clean-up after 24 h and
   overflow protection
 - **Clock** synced with the PTB atomic clock via NTP (CET/CEST, automatic
@@ -64,13 +69,23 @@ Step-by-step guide and troubleshooting: [docs/SETUP.md](docs/SETUP.md)
 
 | PWR button | Action |
 |---|---|
-| short press | alarm active → acknowledge all alarms · otherwise swap µSv/h ↔ CPS |
+| short press | alarm active → acknowledge all alarms · otherwise next page: µSv/h → CPS → DOSE |
 | double press | time sync with the PTB atomic clock |
 | long press (2 s) | beep and switch off (battery only) |
 
-Screen layout (top to bottom): clock · board battery · large value with trend
-arrow · unit · second value · alarm frame · connection status and RadiaCode
-battery · log status.
+Screen layout of pages 1 and 2 (top to bottom): clock · board battery · large
+value with trend arrow · unit · second value · alarm frame · connection
+status and RadiaCode battery · log status.
+
+DOSE page: clock · alarm badge · radiation symbol with two rings · dose in %
+of the limit · dose vs. limit · time until the limit (`DOSE LIMIT IN m:ss`,
+`SAFE`, `LIMIT REACHED`) · extra dose today · configured thresholds ·
+status lines.
+
+| Ring | Shows | Fills | Empties |
+|---|---|---|---|
+| outer, segments, orange | dose of the last 15 min vs. the dose limit | near a source | by itself when you move away (sliding window) |
+| inner, thin, blue | extra dose above background since switching on vs. daily budget | slowly over the day | only when switched off and on again |
 
 Log files: `/logs/rc_YYYY-MM-DD_HHMM.csv` with `Time;uSv/h;CPS;Alarm;Dose15`
 (alarm 0 = none, 1 = HIGH, 2 = DANGER, 3 = DOSE; Dose15 = µSv within the dose
@@ -97,7 +112,7 @@ radzilla/
 ├── board/            files for the board (upload all of them)
 │   ├── boot.py           power latch + buzzer off, runs first
 │   ├── main.py           base system, tasks, status bar
-│   ├── app.py            RadiaCode display, alarms, dose alarm, trend, log
+│   ├── app.py            RadiaCode display: pages, alarms, DOSE page, trend, log
 │   ├── config.py         base settings
 │   ├── rc_config.py      application settings
 │   ├── secrets_example.py

@@ -17,7 +17,7 @@ Create it from `secrets_example.py`.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `VERSION` | `"1.1.0"` | shown in the shell at start-up |
+| `VERSION` | `"1.2.0"` | shown in the shell at start-up |
 | `DIAG` | `False` | status line in the shell every 5 s |
 | `UART_ID`, `SERIAL_BAUD` | `1`, `115200` | UART on header pins 8/9 |
 | `LONG_PRESS_MS` | `2000` | long press → switch off |
@@ -66,7 +66,7 @@ If several are active, the frame shows the most important one:
 | `LEVEL1_USV` | `0.28` | HIGH from this µSv/h – about twice a typical background of 0.12–0.14 µSv/h, i.e. "something radioactive is nearby" |
 | `LEVEL2_USV` | `10.0` | DANGER from this µSv/h – clearly above what hobby samples normally reach; move away |
 | `HYSTERESIS` | `0.10` | every alarm ends only below threshold × (1 − 0.10) |
-| `ALARM_BLINK_MS` | `500` | blink period of the alarm frame |
+| `ALARM_BLINK_MS` | `500` | blink period; HIGH/DANGER blink until acknowledged, DOSE only while its sound plays (then it stays lit) |
 | `ALARM1_TEXT`, `ALARM2_TEXT`, `ALARM3_TEXT` | `"HIGH"`, `"DANGER"`, `"DOSE"` | alarm texts (max. 9 characters) |
 | `ACK_TEXT` | `"ACK"` | shown after acknowledging |
 
@@ -90,7 +90,29 @@ value. The higher the dose rate, the faster it triggers:
 | 1000 µSv/h | ~9 s |
 
 Counting starts with the Bluetooth connection; periods without data (e.g.
-disconnected) count as 0. The frame shows the collected dose, e.g.
+disconnected) count as 0.
+
+### DOSE page (3rd page)
+
+A short PWR press cycles **µSv/h → CPS → DOSE** (while an alarm is active
+the press acknowledges first).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `BACKGROUND_USV` | `0.15` | dose rate below this does not count as extra dose (set slightly above your local background) |
+| `DAILY_BUDGET_USV` | `2.7` | 100 % of the inner ring; ≈ 1 mSv per year (public limit for artificial exposure) ÷ 365 |
+
+- **Outer ring** (24 segments, ~4 % each): dose of the last `DOSE_WINDOW_MIN`
+  minutes in % of `DOSE_LIMIT_USV`. Dimmed orange below 100 %, bright orange
+  from 100 % (= DOSE alarm). It empties again when you move away.
+- **Inner ring** (blue): extra dose since switching on – only the part above
+  `BACKGROUND_USV` – in % of `DAILY_BUDGET_USV`. Information only, no alarm;
+  it restarts at 0 after switching off and on.
+- **Time until the limit:** `DOSE LIMIT IN m:ss` at the current dose rate,
+  `SAFE` if the limit cannot be reached at this rate
+  (rate × window < limit), `LIMIT REACHED` from 100 %.
+- An active alarm is shown as a small badge at the top (the large frame does
+  not fit on this page); the board battery line is hidden. The frame shows the collected dose, e.g.
 `2.6 uSv/15min`. Together with DANGER this covers both cases: a high momentary
 value (DANGER, immediate) and a longer stay at moderately raised levels (DOSE).
 
@@ -100,19 +122,31 @@ value (DANGER, immediate) and a longer stay at moderately raised levels (DOSE).
 > conservative. Authoritative information: Bundesamt für Strahlenschutz,
 > <https://www.bfs.de>.
 
-### Beeps per alarm
+### Sounds per alarm
 
 (`ALARM1_…` HIGH, `ALARM2_…` DANGER, `ALARM3_…` DOSE)
 
 | Setting | Alarm 1 | Alarm 2 | Alarm 3 | Meaning |
 |---|---|---|---|---|
-| `_ON` | `True` | `True` | `True` | beeps on/off (the display still shows the alarm) |
-| `_FREQ_HZ` | `2000` | `3000` | `2500` | beep frequency |
+| `_ON` | `True` | `True` | `True` | sound on/off (the display still shows the alarm) |
+| `_FREQ_HZ` | `2000` | `3000` | `2500` | beep frequency (alarm 3: only with `"beep"`) |
 | `_BEEPS` | `1` | `3` | `2` | beeps per trigger |
 | `_BEEP_MS` | `100` | `100` | `150` | beep length |
 | `_PAUSE_MS` | `100` | `100` | `100` | pause between beeps |
 | `_INTERVAL_MS` | `10000` | `2000` | `5000` | repeat interval |
-| `_MAX_REPEAT` | `3` | `0` | `5` | max. triggers per alarm event, `0` = unlimited |
+| `_MAX_REPEAT` | `3` | `0` | `1` | max. triggers per alarm event, `0` = unlimited |
+
+DOSE alarm sound:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ALARM3_SOUND` | `"siren"` | `"siren"` (rising / falling tone) or `"beep"` (pattern above) |
+| `SIREN_LOW_HZ`, `SIREN_HIGH_HZ` | `1500`, `3500` | frequency range – the small on-board buzzer is quiet below ~1 kHz |
+| `SIREN_RISE_MS`, `SIREN_HOLD_MS`, `SIREN_FALL_MS` | `1200`, `600`, `1200` | rise, hold, fall (≈ 3 s in total) |
+| `SIREN_STEP_MS` | `10` | frequency step interval (smoothness) |
+
+The siren plays once per DOSE alarm event and stops immediately when the
+alarm is acknowledged.
 
 Behaviour:
 

@@ -6,7 +6,7 @@
 # RadiaCode-related settings (alarms, log, trend ...) are in rc_config.py.
 # WiFi credentials are in secrets.py (not in git, see secrets_example.py).
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # --- Diagnostics -------------------------------------------------------------
 DIAG = False              # True: print a status line to the shell every 5 s
