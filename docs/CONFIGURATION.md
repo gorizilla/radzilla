@@ -17,7 +17,7 @@ Create it from `secrets_example.py`.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `VERSION` | `"1.0.0"` | shown in the shell at start-up |
+| `VERSION` | `"1.1.0"` | shown in the shell at start-up |
 | `DIAG` | `False` | status line in the shell every 5 s |
 | `UART_ID`, `SERIAL_BAUD` | `1`, `115200` | UART on header pins 8/9 |
 | `LONG_PRESS_MS` | `2000` | long press → switch off |
@@ -50,34 +50,78 @@ Create it from `secrets_example.py`.
 
 ### Colour levels and alarms
 
+RadZilla has three alarms:
+
+| Code | Alarm | Trigger | Colour |
+|---|---|---|---|
+| 1 | **HIGH** | dose rate ≥ `LEVEL1_USV` | yellow |
+| 2 | **DANGER** | dose rate ≥ `LEVEL2_USV` (immediate) | red |
+| 3 | **DOSE** | dose accumulated within `DOSE_WINDOW_MIN` ≥ `DOSE_LIMIT_USV` | orange |
+
+If several are active, the frame shows the most important one:
+**DANGER > DOSE > HIGH**. Only the shown alarm beeps.
+
 | Setting | Default | Meaning |
 |---|---|---|
-| `LEVEL1_USV` | `0.30` | yellow / alarm 1 (HIGH) from this µSv/h |
-| `LEVEL2_USV` | `1.00` | red / alarm 2 (DANGER) from this µSv/h |
-| `HYSTERESIS` | `0.10` | a level ends only below threshold × (1 − 0.10) |
+| `LEVEL1_USV` | `0.28` | HIGH from this µSv/h – about twice a typical background of 0.12–0.14 µSv/h, i.e. "something radioactive is nearby" |
+| `LEVEL2_USV` | `10.0` | DANGER from this µSv/h – clearly above what hobby samples normally reach; move away |
+| `HYSTERESIS` | `0.10` | every alarm ends only below threshold × (1 − 0.10) |
 | `ALARM_BLINK_MS` | `500` | blink period of the alarm frame |
-| `ALARM1_TEXT`, `ALARM2_TEXT` | `"HIGH"`, `"DANGER"` | alarm texts (max. 9 characters) |
+| `ALARM1_TEXT`, `ALARM2_TEXT`, `ALARM3_TEXT` | `"HIGH"`, `"DANGER"`, `"DOSE"` | alarm texts (max. 9 characters) |
 | `ACK_TEXT` | `"ACK"` | shown after acknowledging |
 
-Per alarm level (`ALARM1_…` yellow, `ALARM2_…` red):
+### Dose alarm
 
-| Setting | Alarm 1 | Alarm 2 | Meaning |
-|---|---|---|---|
-| `_ON` | `True` | `True` | beeps on/off (the display still shows the level) |
-| `_FREQ_HZ` | `2000` | `3000` | beep frequency |
-| `_BEEPS` | `1` | `3` | beeps per trigger |
-| `_BEEP_MS` | `100` | `100` | beep length |
-| `_PAUSE_MS` | `100` | `100` | pause between beeps |
-| `_INTERVAL_MS` | `10000` | `2000` | repeat interval |
-| `_MAX_REPEAT` | `3` | `0` | max. triggers per alarm, `0` = unlimited |
+| Setting | Default | Meaning |
+|---|---|---|
+| `DOSE_ON` | `True` | dose alarm on/off completely |
+| `DOSE_WINDOW_MIN` | `15` | sliding window in minutes |
+| `DOSE_LIMIT_USV` | `2.5` | alarm when more than this many µSv were collected within the window |
+
+The dose alarm looks at the **time spent** near a source, not at the momentary
+value. The higher the dose rate, the faster it triggers:
+
+| Dose rate | DOSE triggers after (2.5 µSv / 15 min) |
+|---|---|
+| 5 µSv/h | never (only 1.25 µSv in 15 min) |
+| 10 µSv/h | ~15 min |
+| 50 µSv/h | ~3 min |
+| 100 µSv/h | ~1.5 min |
+| 1000 µSv/h | ~9 s |
+
+Counting starts with the Bluetooth connection; periods without data (e.g.
+disconnected) count as 0. The frame shows the collected dose, e.g.
+`2.6 uSv/15min`. Together with DANGER this covers both cases: a high momentary
+value (DANGER, immediate) and a longer stay at moderately raised levels (DOSE).
+
+> For orientation only: acute radiation sickness starts at about
+> 500 000–1 000 000 µSv received within a short time – far beyond anything
+> these alarms are meant for. The default values are deliberately very
+> conservative. Authoritative information: Bundesamt für Strahlenschutz,
+> <https://www.bfs.de>.
+
+### Beeps per alarm
+
+(`ALARM1_…` HIGH, `ALARM2_…` DANGER, `ALARM3_…` DOSE)
+
+| Setting | Alarm 1 | Alarm 2 | Alarm 3 | Meaning |
+|---|---|---|---|---|
+| `_ON` | `True` | `True` | `True` | beeps on/off (the display still shows the alarm) |
+| `_FREQ_HZ` | `2000` | `3000` | `2500` | beep frequency |
+| `_BEEPS` | `1` | `3` | `2` | beeps per trigger |
+| `_BEEP_MS` | `100` | `100` | `150` | beep length |
+| `_PAUSE_MS` | `100` | `100` | `100` | pause between beeps |
+| `_INTERVAL_MS` | `10000` | `2000` | `5000` | repeat interval |
+| `_MAX_REPEAT` | `3` | `0` | `5` | max. triggers per alarm event, `0` = unlimited |
 
 Behaviour:
 
-- The repeat counter restarts when the alarm ends (below the hysteresis
-  limit). Escalating from level 1 to 2 starts level 2 with its own counter.
-- **Short PWR press** acknowledges: beeping stops, the frame stops blinking
-  and shows `ACK_TEXT`, until the alarm ends. Escalation to a higher level
-  makes it audible again.
+- Each alarm has its own repeat counter. It restarts when the alarm ends
+  (below the hysteresis limit). Escalating from HIGH to DANGER starts DANGER
+  with its own counter.
+- **Short PWR press** acknowledges **all** running alarms: beeping stops, the
+  frame stops blinking and shows `ACK_TEXT`, until the alarms end. Escalation
+  to a higher rate level or a new dose alarm makes it audible again.
 
 ### Trend arrow
 
@@ -107,13 +151,16 @@ Arrow colours: ↑ orange · → grey · ↓ green.
 File format (`rc_YYYY-MM-DD_HHMM.csv`, semicolon, decimal comma):
 
 ```
-Time;uSv/h;CPS;Alarm
-2026-10-16 14:07:03;0,12;8,53;0
+Time;uSv/h;CPS;Alarm;Dose15
+2026-10-16 14:07:03;0,12;8,53;0;0,03
 ```
 
-`Alarm`: `0` = none, `1` = level 1 (HIGH), `2` = level 2 (DANGER) – always
-derived from the thresholds configured at that moment (same as the display
-colour), independent of whether beeps are enabled.
+- `Alarm`: `0` = none, `1` = HIGH, `2` = DANGER, `3` = DOSE – the alarm shown
+  in the frame at that moment (priority DANGER > DOSE > HIGH), derived from
+  the thresholds configured at that time, independent of whether beeps are
+  enabled.
+- `Dose15`: dose in µSv collected within the dose window
+  (`DOSE_WINDOW_MIN`, default 15 min).
 
 Logging only runs while the RadiaCode is connected with fresh data and the
 RTC has a valid time. About **36 KB per hour**, ~0.9 MB per 24 h.

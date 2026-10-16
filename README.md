@@ -25,9 +25,12 @@ manufacturer of RadiaCode devices.
   switchable with the PWR button
 - **Colour levels** green / yellow / red with configurable thresholds
 - **Trend arrow** ↑ → ↓ (last 10 s vs. the 10 s before)
-- **Two alarm levels** – *HIGH* and *DANGER* – with hysteresis, blinking HUD
-  frame with radiation symbol, configurable beep patterns, repeat limits and
-  acknowledge
+- **Three alarms** with hysteresis, blinking HUD frame with radiation symbol,
+  configurable beep patterns, repeat limits and acknowledge:
+  - *HIGH* (yellow) from 0.28 µSv/h – something radioactive is nearby
+  - *DANGER* (red) from 10 µSv/h – immediate alarm
+  - *DOSE* (orange) – more than 2.5 µSv collected within 15 min, i.e. a
+    longer stay near a source; triggers the faster the higher the dose rate
 - **CSV log** every 3 s in `/logs`, automatic clean-up after 24 h and
   overflow protection
 - **Clock** synced with the PTB atomic clock via NTP (CET/CEST, automatic
@@ -61,7 +64,7 @@ Step-by-step guide and troubleshooting: [docs/SETUP.md](docs/SETUP.md)
 
 | PWR button | Action |
 |---|---|
-| short press | alarm active → acknowledge · otherwise swap µSv/h ↔ CPS |
+| short press | alarm active → acknowledge all alarms · otherwise swap µSv/h ↔ CPS |
 | double press | time sync with the PTB atomic clock |
 | long press (2 s) | beep and switch off (battery only) |
 
@@ -69,8 +72,12 @@ Screen layout (top to bottom): clock · board battery · large value with trend
 arrow · unit · second value · alarm frame · connection status and RadiaCode
 battery · log status.
 
-Log files: `/logs/rc_YYYY-MM-DD_HHMM.csv` with `Time;uSv/h;CPS;Alarm`
-(alarm 0 = none, 1 = HIGH, 2 = DANGER), semicolon and decimal comma.
+Log files: `/logs/rc_YYYY-MM-DD_HHMM.csv` with `Time;uSv/h;CPS;Alarm;Dose15`
+(alarm 0 = none, 1 = HIGH, 2 = DANGER, 3 = DOSE; Dose15 = µSv within the dose
+window), semicolon and decimal comma.
+
+If several alarms are active, the frame shows DANGER > DOSE > HIGH; one short
+PWR press acknowledges all of them.
 
 ## Configuration
 
@@ -90,7 +97,7 @@ radzilla/
 ├── board/            files for the board (upload all of them)
 │   ├── boot.py           power latch + buzzer off, runs first
 │   ├── main.py           base system, tasks, status bar
-│   ├── app.py            RadiaCode display, alarms, trend, log
+│   ├── app.py            RadiaCode display, alarms, dose alarm, trend, log
 │   ├── config.py         base settings
 │   ├── rc_config.py      application settings
 │   ├── secrets_example.py

@@ -4,8 +4,11 @@
 # Copyright (c) 2026 Shimizilla – licensed under CC BY-NC 4.0 (see LICENSE.md)
 #
 #   /logs/rc_2026-10-16_1401.csv
-#     Time;uSv/h;CPS;Alarm
-#     2026-10-16 14:01:03;0,12;8,53;0
+#     Time;uSv/h;CPS;Alarm;Dose15
+#     2026-10-16 14:01:03;0,12;8,53;0;0,03
+#
+#   Alarm  0 = none, 1 = HIGH, 2 = DANGER, 3 = DOSE (alarm shown, by priority)
+#   Dose15 dose in µSv within the dose window (rc_config.DOSE_WINDOW_MIN)
 #
 # * one file per start, new file after LOG_MAX_AGE_H hours of run time
 # * buffered in RAM, written every LOG_FLUSH_S seconds (protects the flash)
@@ -16,7 +19,7 @@
 import os
 import time
 
-HEADER = "Time;uSv/h;CPS;Alarm\n"
+HEADER = "Time;uSv/h;CPS;Alarm;Dose15\n"
 
 
 def _secs(t):
@@ -172,8 +175,9 @@ class Logger:
         print("Log created:", path)
 
     # ---------- writing ----------
-    def add(self, t, usv, cps, level):
-        """Queue one line. t = valid local time tuple."""
+    def add(self, t, usv, cps, alarm, dose):
+        """Queue one line. t = valid local time tuple, alarm = 0..3,
+        dose = µSv within the dose window."""
         if not self.c.LOG_ON or self.full or self.error:
             return
         now_s = _secs(t)
@@ -188,8 +192,9 @@ class Logger:
             elif now_s - self.start_s >= self.c.LOG_MAX_AGE_H * 3600:
                 self.flush()
                 self._new_file(t)
-            self.buf.append("%04d-%02d-%02d %02d:%02d:%02d;%s;%s;%d\n" % (
-                t[0], t[1], t[2], t[3], t[4], t[5], _num(usv), _num(cps), level))
+            self.buf.append("%04d-%02d-%02d %02d:%02d:%02d;%s;%s;%d;%s\n" % (
+                t[0], t[1], t[2], t[3], t[4], t[5],
+                _num(usv), _num(cps), alarm, _num(dose)))
             now = time.ticks_ms()
             if time.ticks_diff(now, self.last_flush) >= self.c.LOG_FLUSH_S * 1000:
                 self.flush()

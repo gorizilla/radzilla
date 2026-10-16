@@ -22,7 +22,9 @@ RC_STALE_MS = 5000         # no new values for this long -> show "--"
 RC_DOSE_FACTOR = 10000.0
 
 # --- CSV log --------------------------------------------------------------------
-# Format: Time;uSv/h;CPS;Alarm   (Alarm 0 = none, 1 = level 1, 2 = level 2)
+# Format: Time;uSv/h;CPS;Alarm;Dose15
+#   Alarm  0 = none, 1 = HIGH, 2 = DANGER, 3 = DOSE (the alarm shown, by priority)
+#   Dose15 dose in µSv accumulated within the dose window (DOSE_WINDOW_MIN)
 # Semicolon + decimal comma -> opens directly in German Numbers/Excel.
 LOG_ON = True
 LOG_DIR = "/logs"
@@ -43,15 +45,28 @@ TREND_MIN_USV = 0.02       # ... and at least this many µSv/h
 TREND_MIN_CPS = 1.0        # ... or this many CPS (in CPS view)
 
 # --- Colour levels = alarm thresholds (µSv/h) -----------------------------------
-LEVEL1_USV = 0.30          # yellow / alarm 1 from here
-LEVEL2_USV = 1.00          # red    / alarm 2 from here
-HYSTERESIS = 0.10          # 10 %: alarm ends only below threshold x 0.9
+LEVEL1_USV = 0.28          # yellow / alarm 1 (HIGH) – about 2x local background
+LEVEL2_USV = 10.0          # red    / alarm 2 (DANGER) – immediate alarm
+HYSTERESIS = 0.10          # 10 %: an alarm ends only below threshold x 0.9
+                           # (also used for the dose alarm)
+
+# --- Dose alarm (alarm 3) ---------------------------------------------------------
+# Triggers when the dose accumulated within the last DOSE_WINDOW_MIN minutes
+# exceeds DOSE_LIMIT_USV. The higher the dose rate, the faster it triggers:
+# 2.5 µSv / 15 min -> 10 µSv/h after ~15 min, 100 µSv/h after ~1.5 min.
+# Counting starts with the connection; gaps without data count as 0.
+DOSE_ON = True             # False = dose alarm completely off
+DOSE_WINDOW_MIN = 15
+DOSE_LIMIT_USV = 2.5
 
 # --- Alarm display ---------------------------------------------------------------
 ALARM_BLINK_MS = 500       # on/off period while not acknowledged
 ALARM1_TEXT = "HIGH"       # max. 9 characters
 ALARM2_TEXT = "DANGER"     # max. 9 characters
+ALARM3_TEXT = "DOSE"       # max. 9 characters
 ACK_TEXT = "ACK"           # shown after acknowledging (short PWR press)
+# Several alarms at once: the frame shows the most important one,
+# priority DANGER > DOSE > HIGH. One short PWR press acknowledges all.
 
 # --- Alarm 1 (yellow) ------------------------------------------------------------
 ALARM1_ON = True           # False = no beeps (display still shows the level)
@@ -70,3 +85,12 @@ ALARM2_BEEP_MS = 100
 ALARM2_PAUSE_MS = 100
 ALARM2_INTERVAL_MS = 2000
 ALARM2_MAX_REPEAT = 0      # 0 = unlimited
+
+# --- Alarm 3 (orange, dose alarm) --------------------------------------------------
+ALARM3_ON = True           # beeps only; DOSE_ON switches the whole alarm
+ALARM3_FREQ_HZ = 2500
+ALARM3_BEEPS = 2
+ALARM3_BEEP_MS = 150
+ALARM3_PAUSE_MS = 100
+ALARM3_INTERVAL_MS = 5000
+ALARM3_MAX_REPEAT = 5      # 0 = unlimited
